@@ -1,0 +1,7 @@
+asyncio
+boto3
+numpy
+py-cui
+pyaudio
+amazon-transcribe
+python-dotenv
