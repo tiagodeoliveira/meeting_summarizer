@@ -8,7 +8,6 @@ Meeting Summarizer is a Python application that provides real-time transcription
 - Speaker identification
 - Continuous summarization of the meeting content
 - Text-based User Interface (TUI) for easy monitoring
-- Support for audio routing via BlackHole (virtual audio driver)
 
 ## Prerequisites
 
