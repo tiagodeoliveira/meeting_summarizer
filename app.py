@@ -12,9 +12,10 @@ from amazon_transcribe.handlers import TranscriptResultStreamHandler
 from amazon_transcribe.model import TranscriptEvent, TranscriptResultStream
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
-from textual.widgets import ProgressBar, Static
+from textual.widgets import Footer, ProgressBar, Static
 
 load_dotenv()
 
@@ -124,8 +125,7 @@ class TranscriptionHandler(TranscriptResultStreamHandler):
         for item in items:
             if item.stable and item.speaker:
                 if current_item and (
-                    current_item.speaker != item.speaker or item.content.startswith(
-                        " ")
+                    current_item.speaker != item.speaker or item.content.startswith(" ")
                 ):
                     self._add_to_buffer(current_item)
                     current_item = None
@@ -171,12 +171,6 @@ class AudioApp(App):
         border: solid yellow;
     }
 
-    Footer {
-        background: $boost;
-        color: $text;
-        height: 1;
-    }
-
     VolumeGauge {
         content-align: center middle;
         width: 100%;
@@ -196,11 +190,26 @@ class AudioApp(App):
     }
 
     .transcription-message {
-        margin: 1 0;
-        padding: 1;
         border: solid white;
     }
     """
+
+    BINDINGS = [
+        Binding(key="q", action="quit", description="Quit the app"),
+        Binding(key="s", action="save", description="Save transcription and summary"),
+    ]
+
+    def action_save(self) -> None:
+        file_name = "meeting.md"
+
+        with open(file_name, "w") as f:
+            f.write("## Transcription:\n")
+            for transcription in self.transcriptions:
+                f.write(f"* {transcription.speaker}: {transcription.text}\n")
+            f.write("\n## Summary:\n")
+            f.write(self.summary)
+
+        logging.info(f"Saved transcription and summary to {file_name}")
 
     def __init__(self):
         super().__init__()
@@ -214,6 +223,7 @@ class AudioApp(App):
                 yield SummaryBox()
             yield LogBox()
             yield ProgressBar(total=100, show_eta=False)
+        yield Footer()
 
     def on_mount(self) -> None:
         self.setup_logging()
@@ -339,6 +349,7 @@ class AudioApp(App):
                 )
                 new_summary = response["output"]["message"]["content"][0]["text"]
                 self.summary_box.update_summary(new_summary)
+                self.summary = new_summary
             except Exception as e:
                 logging.error(f"Error in summarization: {e}")
 
