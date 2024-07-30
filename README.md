@@ -66,8 +66,10 @@ You can modify the `Config` class in the script to adjust audio settings, AWS re
 
 ## Components
 
-- `TUIApp`: Manages the text-based user interface
-- `AudioManager`: Handles audio capture using PyAudio
+- `AudioApp`: Main application class managing the TUI and background tasks
+- `TranscriptionBox`: Displays real-time transcriptions
+- `SummaryBox`: Shows the ongoing summary
+- `LogBox`: Displays application logs
 - `TranscriptionHandler`: Processes transcription events from Amazon Transcribe
 
 ## Troubleshooting
