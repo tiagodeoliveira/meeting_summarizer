@@ -1,7 +1,7 @@
 asyncio
 boto3
 numpy
-py-cui
+textual
 pyaudio
 amazon-transcribe
 python-dotenv

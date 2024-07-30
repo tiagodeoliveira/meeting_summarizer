@@ -8,14 +8,13 @@ Meeting Summarizer is a Python application that provides real-time transcription
 - Speaker identification
 - Continuous summarization of the meeting content
 - Text-based User Interface (TUI) for easy monitoring
-- Support for audio routing via BlackHole (virtual audio driver)
+- Volume level visualization
 
 ## Prerequisites
 
 - Python 3.7+
 - AWS account with access to Amazon Transcribe and Bedrock (for Claude 3 Sonnet)
 - PyAudio and its dependencies
-- [Optional] BlackHole 2ch (for audio routing)
 
 ## Installation
 
@@ -37,37 +36,56 @@ Meeting Summarizer is a Python application that provides real-time transcription
    AWS_REGION=us-west-2
    ```
 
-4. [Optional] Install BlackHole:
-   - Download BlackHole from [the official GitHub repository](https://github.com/ExistentialAudio/BlackHole)
-   - Follow the installation instructions provided in the BlackHole repository
-
 ## Usage
 
-2. Run the application with:
+1. Run the application with:
    ```
    python app.py
    ```
 
-3. In the TUI that appears, you'll see:
+2. In the TUI that appears, you'll see:
    - Left column: Real-time transcription
    - Right column: Ongoing summary
    - Bottom: Audio input level and logs
 
-4. The application will automatically start capturing audio from BlackHole, transcribing it, and generating summaries.
+3. The application will automatically start capturing audio, transcribing it, and generating summaries.
 
 ## Configuration
 
-You can modify the `Config` class in the script to adjust audio settings, AWS region, or the Claude model version. If you're using a different virtual audio driver or want to change the input device, you may need to update the `CHANNELS` and `RATE` in the `Config` class.
+You can modify the `Config` class in the script to adjust audio settings, AWS region, or the Claude model version. The current configuration includes:
+
+- CHUNK: 2048
+- FORMAT: pyaudio.paInt16
+- CHANNELS: 1
+- RATE: 16000
+- REGION: "us-west-2"
+- MODEL_ID: "anthropic.claude-3-sonnet-20240229-v1:0"
+- SUMMARIZATION_BUFFER_LENGTH: 5
 
 ## Components
 
-- `TUIApp`: Manages the text-based user interface
-- `AudioManager`: Handles audio capture using PyAudio
+- `AudioApp`: Main application class managing the TUI and background tasks
+- `TranscriptionBox`: Displays real-time transcriptions
+- `SummaryBox`: Shows the ongoing summary
+- `LogBox`: Displays application logs
 - `TranscriptionHandler`: Processes transcription events from Amazon Transcribe
-- `TranscriptionManager`: Manages transcriptions and summaries
 
 ## Troubleshooting
 
-- If you're not seeing any audio input, make sure BlackHole is properly set up and your meeting software is outputting to BlackHole.
 - Check the logs at the bottom of the TUI for any error messages.
 - Ensure your AWS credentials are correctly set up in the `.env` file.
+- If you're having issues with audio input, verify that your microphone is properly configured and accessible to the application.
+
+## Dependencies
+
+- asyncio
+- boto3
+- numpy
+- pyaudio
+- amazon-transcribe
+- python-dotenv
+- textual
+
+## Note
+
+This application uses the Claude 3 Sonnet model for summarization. Ensure you have the necessary permissions and credits to use this model in your AWS account.
