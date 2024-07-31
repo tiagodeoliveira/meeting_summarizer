@@ -2,6 +2,8 @@
 
 Meeting Summarizer is a Python application that provides real-time transcription, summarization, and chat functionality for audio meetings. It uses Amazon Transcribe for speech-to-text conversion and Claude 3 Sonnet for summarization and chat interactions.
 
+[![asciicast](https://asciinema.org/a/670310.svg)](https://asciinema.org/a/670310)
+
 ## Features
 
 - Real-time audio capture and transcription
