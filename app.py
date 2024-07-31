@@ -15,7 +15,8 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
-from textual.widgets import Footer, ProgressBar, Static
+from textual.reactive import reactive
+from textual.widgets import Footer, Input, ProgressBar, Static
 
 load_dotenv()
 
@@ -23,6 +24,10 @@ SUMMARIZE_SYSTEM_PROMPT = """You are an executive assistant, responsible for lis
 This is an ongoing conversation, not all ideas might be formed, if that is the case, try to summarize the best you can.
 Messages will be provided in json format, with the speaker identification, timestamp, and the message itself.
 Try to identify the names of each interlocutor, since they will be only identified by the speaker id.
+"""
+CHAT_SYSTEM_PROMPT = """You are an executive assistant, you are able to answer questions about every single aspect of a meeting.
+You will be provided with a transcription of the specific meeting in json format, with the speaker identification, timestamp, and the message itself.
+You should answer the user's questions as best as you can based on the transcription provided to you.
 """
 
 
@@ -52,6 +57,44 @@ class Transcription:
     ts: float
     speaker: str
     text: str
+
+
+class ChatMessage(Static):
+    sender = reactive("Human")
+    content = reactive("")
+
+    def __init__(self, sender: str, content: str) -> None:
+        super().__init__()
+        self.sender = sender
+        self.content = content
+
+    def render(self) -> str:
+        return f"{self.content}"
+
+    def on_mount(self) -> None:
+        self.add_class(self.sender.lower())
+
+
+class ChatScrollBox(VerticalScroll):
+    def add_chat(self, sender: str, content: str) -> None:
+        new_message = ChatMessage(sender, content)
+        self.mount(new_message)
+        self.scroll_end(animate=False)
+
+
+class ChatBox(Vertical):
+    def compose(self) -> ComposeResult:
+        yield Static("Chat", classes="title")
+        yield ChatScrollBox()
+        yield Input(placeholder="Type your message here...", classes="chat-input")
+
+    def on_mount(self) -> None:
+        self.chat_scroll_box = self.query_one(ChatScrollBox)
+        self.chat_input = self.query_one(Input)
+
+    def add_chat(self, sender: str, content: str) -> None:
+        self.chat_scroll_box.add_chat(sender, content)
+        self.chat_input.clear()
 
 
 class TranscriptionBox(VerticalScroll):
@@ -162,19 +205,21 @@ class AudioApp(App):
 
     TranscriptionBox, SummaryBox {
         width: 1fr;
-        height: 100%;
+        height: 70%;
         border: solid green;
+    }
+
+    SummaryBox {
+        height: 40%;
     }
 
     LogBox {
         height: 1fr;
-        border: solid yellow;
+        border: solid green;
     }
 
-    VolumeGauge {
-        content-align: center middle;
-        width: 100%;
-        height: 40;
+    ChatBox {
+        border: solid green;
     }
 
     .title, .log-title {
@@ -192,12 +237,55 @@ class AudioApp(App):
     .transcription-message {
         border: solid white;
     }
+
+    ChatMessage {
+        width: 100%;
+        padding: 1 2;
+    }
+
+    ChatMessage.human {
+        background: #303030;
+        color: #ffffff;
+        text-align: left;
+    }
+
+    ChatMessage.bot {
+        background: #505050;
+        color: #ffffff;
+        text-align: right;
+    }
     """
 
     BINDINGS = [
         Binding(key="q", action="quit", description="Quit the app"),
         Binding(key="s", action="save", description="Save transcription and summary"),
     ]
+
+    def __init__(self):
+        super().__init__()
+        self.transcriptions: List[Transcription] = []
+        self.summary: str = ""
+
+    def compose(self) -> ComposeResult:
+        with Horizontal():
+            with Vertical():
+                yield TranscriptionBox()
+                yield LogBox()
+            with Vertical():
+                yield SummaryBox()
+                yield ChatBox()
+        yield ProgressBar(total=100, show_eta=False)
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.setup_logging()
+        self.transcription_box = self.query_one(TranscriptionBox)
+        self.summary_box = self.query_one(SummaryBox)
+        self.log_box = self.query_one(LogBox)
+        self.volume_level = self.query_one(ProgressBar)
+        self.chat_box = self.query_one(ChatBox)
+
+        self.start_background_tasks()
 
     def action_save(self) -> None:
         file_name = "meeting.md"
@@ -211,28 +299,26 @@ class AudioApp(App):
 
         logging.info(f"Saved transcription and summary to {file_name}")
 
-    def __init__(self):
-        super().__init__()
-        self.transcriptions: List[Transcription] = []
-        self.summary: str = ""
+    async def chat_with_llm(self, message: str):
+        def update_chat(llm_answer):
+            self.chat_box.add_chat("Bot", llm_answer)
 
-    def compose(self) -> ComposeResult:
-        with Vertical():
-            with Horizontal():
-                yield TranscriptionBox()
-                yield SummaryBox()
-            yield LogBox()
-            yield ProgressBar(total=100, show_eta=False)
-        yield Footer()
+        logging.info("Chatting with LLM")
+        transcription_str = self.get_transcriptions_json()
+        prompt = f"""
+        <transcription>{transcription_str}</transcription>
 
-    def on_mount(self) -> None:
-        self.setup_logging()
-        self.transcription_box = self.query_one(TranscriptionBox)
-        self.summary_box = self.query_one(SummaryBox)
-        self.log_box = self.query_one(LogBox)
-        self.volume_level = self.query_one(ProgressBar)
 
-        self.start_background_tasks()
+            User Question:
+            ```
+            {message}
+            ```
+        """
+        await self.talk_to_llm(CHAT_SYSTEM_PROMPT, prompt, update_chat)
+
+    def on_input_submitted(self, message: Input.Submitted) -> None:
+        self.chat_box.add_chat("Human", message.value)
+        asyncio.create_task(self.chat_with_llm(message.value))
 
     def setup_logging(self) -> None:
         logger = logging.getLogger()
@@ -247,8 +333,8 @@ class AudioApp(App):
     def start_background_tasks(self) -> None:
         asyncio.create_task(self.capture_audio())
         asyncio.create_task(self.process_audio_chunks())
-        asyncio.create_task(self.summarize())
         asyncio.create_task(self.update_volume())
+        asyncio.create_task(self.summarize())
 
     async def update_volume(self) -> None:
         while True:
@@ -317,7 +403,7 @@ class AudioApp(App):
             )
 
             handler = TranscriptionHandler(stream.output_stream, self)
-            asyncio.create_task(handler.handle_events())
+            handler_task = asyncio.create_task(handler.handle_events())
 
             while True:
                 chunk = await audio_queue.get()
@@ -325,13 +411,30 @@ class AudioApp(App):
                     break
                 await stream.input_stream.send_audio_event(audio_chunk=chunk)
 
+            handler_task.cancel()
             await stream.input_stream.end_stream()
             await transcription_queue.put(None)
         except Exception as e:
             logging.error(f"Error in audio processing: {e}")
 
+    async def talk_to_llm(self, system_prompt: str, message: str, callback):
+        def converse():
+            response = bedrock.converse(
+                modelId=config.MODEL_ID,
+                system=[{"text": system_prompt}],
+                messages=[{"role": "user", "content": [{"text": message}]}],
+            )
+            return response["output"]["message"]["content"][0]["text"]
+
+        answer = await asyncio.to_thread(converse)
+        callback(answer)
+
     async def summarize(self) -> None:
         logging.info("Starting summarizer")
+
+        def update_summary(new_summary):
+            self.summary_box.update_summary(new_summary)
+            self.summary = new_summary
 
         while True:
             try:
@@ -339,17 +442,11 @@ class AudioApp(App):
                 if transcription is None:
                     break
 
-                logging.info("Summarizing transcription")
-                prompt = self.get_transcriptions_json()
-
-                response = bedrock.converse(
-                    modelId=config.MODEL_ID,
-                    system=[{"text": SUMMARIZE_SYSTEM_PROMPT}],
-                    messages=[{"role": "user", "content": [{"text": prompt}]}],
+                await self.talk_to_llm(
+                    SUMMARIZE_SYSTEM_PROMPT,
+                    self.get_transcriptions_json(),
+                    update_summary,
                 )
-                new_summary = response["output"]["message"]["content"][0]["text"]
-                self.summary_box.update_summary(new_summary)
-                self.summary = new_summary
             except Exception as e:
                 logging.error(f"Error in summarization: {e}")
 
