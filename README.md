@@ -1,14 +1,15 @@
 # Meeting Summarizer
 
-Meeting Summarizer is a Python application that provides real-time transcription and summarization of audio meetings. It uses Amazon Transcribe for speech-to-text conversion and Claude 3 Sonnet for summarization.
+Meeting Summarizer is a Python application that provides real-time transcription, summarization, and interactive chat functionality for audio meetings. It uses Amazon Transcribe for speech-to-text conversion and Claude 3 Sonnet for summarization and chat interactions.
 
-[![asciicast](https://asciinema.org/a/670188.svg)](https://asciinema.org/a/670188)
+[![asciicast](https://asciinema.org/a/670292.svg)](https://asciinema.org/a/670292)
 
 ## Features
 
 - Real-time audio capture and transcription
 - Speaker identification
 - Continuous summarization of the meeting content
+- Interactive chat interface to ask questions about the meeting
 - Text-based User Interface (TUI) for easy monitoring
 - Volume level visualization
 
@@ -46,11 +47,20 @@ Meeting Summarizer is a Python application that provides real-time transcription
    ```
 
 2. In the TUI that appears, you'll see:
-   - Left column: Real-time transcription
-   - Right column: Ongoing summary
-   - Bottom: Audio input level and logs
+   - Left column: Real-time transcription and application logs
+   - Right column: Ongoing summary and chat interface
+   - Bottom: Audio input level
 
 3. The application will automatically start capturing audio, transcribing it, and generating summaries.
+
+4. To interact with the chat:
+   - Type your question in the chat input box at the bottom of the right column
+   - Press Enter to submit your question
+   - The AI will respond based on the meeting's transcription and context
+
+5. Additional commands:
+   - Press 'q' to quit the application
+   - Press 's' to save the transcription and summary to a file named 'meeting.md'
 
 ## Configuration
 
@@ -69,12 +79,13 @@ You can modify the `Config` class in the script to adjust audio settings, AWS re
 - `AudioApp`: Main application class managing the TUI and background tasks
 - `TranscriptionBox`: Displays real-time transcriptions
 - `SummaryBox`: Shows the ongoing summary
+- `ChatBox`: Provides an interactive chat interface
 - `LogBox`: Displays application logs
 - `TranscriptionHandler`: Processes transcription events from Amazon Transcribe
 
 ## Troubleshooting
 
-- Check the logs at the bottom of the TUI for any error messages.
+- Check the logs in the bottom-left of the TUI for any error messages.
 - Ensure your AWS credentials are correctly set up in the `.env` file.
 - If you're having issues with audio input, verify that your microphone is properly configured and accessible to the application.
 
@@ -90,4 +101,4 @@ You can modify the `Config` class in the script to adjust audio settings, AWS re
 
 ## Note
 
-This application uses the Claude 3 Sonnet model for summarization. Ensure you have the necessary permissions and credits to use this model in your AWS account.
+This application uses the Claude 3 Sonnet model for summarization and chat interactions. Ensure you have the necessary permissions and credits to use this model in your AWS account.
