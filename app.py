@@ -1,7 +1,10 @@
 import asyncio
+import datetime
 import json
 import logging
+import wave
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import List
 
 import boto3
@@ -40,6 +43,7 @@ class Config:
     REGION: str = "us-west-2"
     MODEL_ID: str = "anthropic.claude-3-sonnet-20240229-v1:0"
     SUMMARIZATION_BUFFER_LENGTH: int = 5
+    PERSISTING_DIR = "meetings"
 
 
 config = Config()
@@ -50,6 +54,8 @@ transcribe_client = TranscribeStreamingClient(region=config.REGION)
 level_queue: asyncio.Queue = asyncio.Queue()
 audio_queue: asyncio.Queue = asyncio.Queue()
 transcription_queue: asyncio.Queue = asyncio.Queue()
+
+Path(config.PERSISTING_DIR).mkdir(parents=True, exist_ok=True)
 
 
 @dataclass
@@ -254,17 +260,28 @@ class AudioApp(App):
         color: #ffffff;
         text-align: right;
     }
+
+    #status {
+        height: 2h;
+    }
+
+    .hidden {
+        visibility: hidden;
+    }
     """
 
     BINDINGS = [
+        Binding(key="s", action="start_stop", description="Start / Stop"),
         Binding(key="q", action="quit", description="Quit the app"),
-        Binding(key="s", action="save", description="Save transcription and summary"),
     ]
 
     def __init__(self):
         super().__init__()
         self.transcriptions: List[Transcription] = []
         self.summary: str = ""
+        self.running = False
+        self.closing = False
+        self.chat = []
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -274,7 +291,8 @@ class AudioApp(App):
             with Vertical():
                 yield SummaryBox()
                 yield ChatBox()
-        yield ProgressBar(total=100, show_eta=False)
+        with Horizontal(id="status"):
+            yield ProgressBar(total=100, show_eta=False, classes="hidden")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -285,23 +303,62 @@ class AudioApp(App):
         self.volume_level = self.query_one(ProgressBar)
         self.chat_box = self.query_one(ChatBox)
 
-        self.start_background_tasks()
+    def action_start_stop(self) -> None:
+        if self.running:
+            self.stop()
+        else:
+            self.start()
 
-    def action_save(self) -> None:
-        file_name = "meeting.md"
+    def stop(self) -> None:
+        if not self.running:
+            return
 
+        logging.info("Stopping process")
+        self.volume_level.add_class("hidden")
+        self.wave_file.close()
+        for task in self.tasks:
+            task.cancel()
+        self.dump()
+        self.running = False
+
+    def start(self) -> None:
+        logging.info("Starting process...")
+        self.meeting = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        self.wave_file = wave.open(
+            f"{config.PERSISTING_DIR}/recording_{self.meeting}.wav", "wb"
+        )
+        self.volume_level.remove_class("hidden")
+        self.tasks = [
+            asyncio.create_task(self.capture_audio()),
+            asyncio.create_task(self.process_audio_chunks()),
+            asyncio.create_task(self.update_volume()),
+            asyncio.create_task(self.summarize()),
+        ]
+        self.running = True
+
+    def dump(self) -> None:
+        file_name = f"{config.PERSISTING_DIR}/meeting_{self.meeting}.md"
         with open(file_name, "w") as f:
+            f.write("\n## Summary:\n")
+            f.write(self.summary)
+            f.write("\n## Chat:\n")
+            for chat in self.chat:
+                f.write(f"* {chat['sender']}: {chat['content']}\n")
             f.write("## Transcription:\n")
             for transcription in self.transcriptions:
                 f.write(f"* {transcription.speaker}: {transcription.text}\n")
-            f.write("\n## Summary:\n")
-            f.write(self.summary)
 
         logging.info(f"Saved transcription and summary to {file_name}")
+
+    def action_quit(self) -> None:
+        self.stop()
+        self.closing = True
+        self.exit()
 
     async def chat_with_llm(self, message: str):
         def update_chat(llm_answer):
             self.chat_box.add_chat("Bot", llm_answer)
+            self.chat.append({"sender": "bot", "content": llm_answer})
 
         logging.info("Chatting with LLM")
         transcription_str = self.get_transcriptions_json()
@@ -314,6 +371,7 @@ class AudioApp(App):
             {message}
             ```
         """
+        self.chat.append({"sender": "human", "content": message})
         await self.talk_to_llm(CHAT_SYSTEM_PROMPT, prompt, update_chat)
 
     def on_input_submitted(self, message: Input.Submitted) -> None:
@@ -329,12 +387,6 @@ class AudioApp(App):
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-
-    def start_background_tasks(self) -> None:
-        asyncio.create_task(self.capture_audio())
-        asyncio.create_task(self.process_audio_chunks())
-        asyncio.create_task(self.update_volume())
-        asyncio.create_task(self.summarize())
 
     async def update_volume(self) -> None:
         while True:
@@ -371,6 +423,10 @@ class AudioApp(App):
                 stream_callback=callback,
                 frames_per_buffer=config.CHUNK,
             )
+
+            self.wave_file.setnchannels(config.CHANNELS)
+            self.wave_file.setsampwidth(p.get_sample_size(config.FORMAT))
+            self.wave_file.setframerate(config.RATE)
 
             logging.info("Audio stream opened")
             while stream.is_active():
@@ -410,6 +466,7 @@ class AudioApp(App):
                 if chunk is None:
                     break
                 await stream.input_stream.send_audio_event(audio_chunk=chunk)
+                self.wave_file.writeframes(chunk)
 
             handler_task.cancel()
             await stream.input_stream.end_stream()
@@ -451,7 +508,8 @@ class AudioApp(App):
                 logging.error(f"Error in summarization: {e}")
 
     def on_log_message(self, message: LogMessage) -> None:
-        self.log_box.add_log(message.message)
+        if not self.closing:
+            self.log_box.add_log(message.message)
 
 
 if __name__ == "__main__":

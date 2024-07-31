@@ -1,17 +1,16 @@
 # Meeting Summarizer
 
-Meeting Summarizer is a Python application that provides real-time transcription, summarization, and interactive chat functionality for audio meetings. It uses Amazon Transcribe for speech-to-text conversion and Claude 3 Sonnet for summarization and chat interactions.
-
-[![asciicast](https://asciinema.org/a/670292.svg)](https://asciinema.org/a/670292)
+Meeting Summarizer is a Python application that provides real-time transcription, summarization, and chat functionality for audio meetings. It uses Amazon Transcribe for speech-to-text conversion and Claude 3 Sonnet for summarization and chat interactions.
 
 ## Features
 
 - Real-time audio capture and transcription
 - Speaker identification
 - Continuous summarization of the meeting content
-- Interactive chat interface to ask questions about the meeting
 - Text-based User Interface (TUI) for easy monitoring
 - Volume level visualization
+- Chat functionality to ask questions about the meeting
+- Audio recording and meeting data persistence
 
 ## Prerequisites
 
@@ -47,20 +46,19 @@ Meeting Summarizer is a Python application that provides real-time transcription
    ```
 
 2. In the TUI that appears, you'll see:
-   - Left column: Real-time transcription and application logs
-   - Right column: Ongoing summary and chat interface
+   - Top left: Real-time transcription
+   - Top right: Ongoing summary
+   - Bottom left: Application logs
+   - Bottom right: Chat interface
    - Bottom: Audio input level
 
-3. The application will automatically start capturing audio, transcribing it, and generating summaries.
+3. Use the following key bindings:
+   - `s`: Start/Stop the meeting recording and processing
+   - `q`: Quit the application
 
-4. To interact with the chat:
-   - Type your question in the chat input box at the bottom of the right column
-   - Press Enter to submit your question
-   - The AI will respond based on the meeting's transcription and context
+4. When the meeting is active, the application will automatically capture audio, transcribe it, generate summaries, and allow for chat interactions.
 
-5. Additional commands:
-   - Press 'q' to quit the application
-   - Press 's' to save the transcription and summary to a file named 'meeting.md'
+5. Use the chat interface to ask questions about the ongoing meeting.
 
 ## Configuration
 
@@ -73,19 +71,26 @@ You can modify the `Config` class in the script to adjust audio settings, AWS re
 - REGION: "us-west-2"
 - MODEL_ID: "anthropic.claude-3-sonnet-20240229-v1:0"
 - SUMMARIZATION_BUFFER_LENGTH: 5
+- PERSISTING_DIR: "meetings"
 
 ## Components
 
 - `AudioApp`: Main application class managing the TUI and background tasks
 - `TranscriptionBox`: Displays real-time transcriptions
 - `SummaryBox`: Shows the ongoing summary
-- `ChatBox`: Provides an interactive chat interface
 - `LogBox`: Displays application logs
+- `ChatBox`: Provides chat functionality for interacting with the meeting content
 - `TranscriptionHandler`: Processes transcription events from Amazon Transcribe
+
+## Data Persistence
+
+The application saves meeting data in the `meetings` directory:
+- Audio recordings are saved as WAV files
+- Meeting transcriptions, summaries, and chat logs are saved as Markdown files
 
 ## Troubleshooting
 
-- Check the logs in the bottom-left of the TUI for any error messages.
+- Check the logs at the bottom-left of the TUI for any error messages.
 - Ensure your AWS credentials are correctly set up in the `.env` file.
 - If you're having issues with audio input, verify that your microphone is properly configured and accessible to the application.
 
@@ -98,6 +103,7 @@ You can modify the `Config` class in the script to adjust audio settings, AWS re
 - amazon-transcribe
 - python-dotenv
 - textual
+- wave
 
 ## Note
 
