@@ -19,7 +19,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.reactive import reactive
-from textual.widgets import Footer, Input, ProgressBar, Static
+from textual.widgets import Footer, Input, ProgressBar, Static, Select
 
 load_dotenv()
 
@@ -64,6 +64,18 @@ class Transcription:
     speaker: str
     text: str
 
+class DeviceSelectionDialog(Static):
+    def compose(self) -> ComposeResult:
+        devices = []
+        p = pyaudio.PyAudio()
+        for i in range(p.get_device_count()):
+            device_info = p.get_device_info_by_index(i)
+            if device_info['maxInputChannels'] > 0:  # Only show input devices
+                devices.append((f"{device_info['name']}", i))
+        p.terminate()
+
+        yield Static("Select Input Device:", classes="dialog-title")
+        yield Select(options=devices, id="device_select")
 
 class ChatMessage(Static):
     sender = reactive("Human")
@@ -268,6 +280,24 @@ class AudioApp(App):
     .hidden {
         visibility: hidden;
     }
+
+    DeviceSelectionDialog {
+        layout: vertical;
+        dock: top;
+        height: auto;
+        padding: 1;
+        background: $surface;
+        border: solid $primary;
+    }
+
+    .dialog-title {
+        text-align: center;
+        padding-bottom: 1;
+    }
+
+    Select {
+        width: 100%;
+    }
     """
 
     BINDINGS = [
@@ -282,8 +312,10 @@ class AudioApp(App):
         self.running = False
         self.closing = False
         self.chat = []
+        self.selected_device_index = None
 
     def compose(self) -> ComposeResult:
+        yield DeviceSelectionDialog()
         with Horizontal():
             with Vertical():
                 yield TranscriptionBox()
@@ -294,6 +326,11 @@ class AudioApp(App):
         with Horizontal(id="status"):
             yield ProgressBar(total=100, show_eta=False, classes="hidden")
         yield Footer()
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id == "device_select":
+            self.selected_device_index = event.value
+            self.query_one(DeviceSelectionDialog).remove()
 
     def on_mount(self) -> None:
         self.setup_logging()
@@ -414,6 +451,8 @@ class AudioApp(App):
 
         try:
             p = pyaudio.PyAudio()
+            device_index = self.selected_device_index if self.selected_device_index is not None else p.get_default_input_device_info()['index']
+            device = p.get_device_info_by_index(device_index)
 
             stream = p.open(
                 format=config.FORMAT,
@@ -422,13 +461,14 @@ class AudioApp(App):
                 input=True,
                 stream_callback=callback,
                 frames_per_buffer=config.CHUNK,
+                input_device_index=device_index
             )
 
             self.wave_file.setnchannels(config.CHANNELS)
             self.wave_file.setsampwidth(p.get_sample_size(config.FORMAT))
             self.wave_file.setframerate(config.RATE)
 
-            logging.info("Audio stream opened")
+            logging.info(f"Audio stream opened ({device['name']})")
             while stream.is_active():
                 await asyncio.sleep(0.1)
         except Exception as e:
